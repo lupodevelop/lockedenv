@@ -1,0 +1,30 @@
+[package]
+name = "env-lock"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+description = "Type-safe, freeze-on-load environment variable management"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/yourname/env-lock"
+keywords = ["env", "config", "environment", "type-safe"]
+categories = ["config"]
+
+[features]
+default = []
+dotenv = ["dep:dotenvy"]
+url-type = ["dep:url"]
+watch = []
+serde = ["dep:serde", "url?/serde"]
+tracing = ["dep:tracing"]
+
+[dependencies]
+dotenvy = { version = "0.15", optional = true }
+url = { version = "2", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+tracing = { version = "0.1", optional = true }
+zeroize = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"
+zeroize = "1"
