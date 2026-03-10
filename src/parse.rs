@@ -152,7 +152,7 @@ impl<T: FromEnvStr> FromEnvStr for Vec<T> {
 
 /// A wrapper for sensitive environment variables that:
 ///
-/// - **Redacts** the value in [`Debug`] and (when `serde` is enabled) [`Serialize`] output.
+/// - **Redacts** the value in [`Debug`] and (when the `serde` feature is enabled) in `Serialize` output.
 /// - **Zeroes** the inner heap memory on [`Drop`] via [`Zeroize`].
 /// - **Prevents** raw values from leaking into error messages
 ///   ([`REDACT_IN_ERRORS`](FromEnvStr::REDACT_IN_ERRORS) = `true`).
