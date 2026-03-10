@@ -1,4 +1,4 @@
-// macros are called with env_lock:: prefix
+// macros are called with lockedenv:: prefix
 
 struct AppConfig {
     port: u16,
@@ -8,7 +8,7 @@ struct AppConfig {
 
 impl AppConfig {
     fn from_env() -> Self {
-        let raw = env_lock::load! {
+        let raw = lockedenv::load! {
             PORT: u16 = 8080,
             DATABASE_URL: String,
             DEBUG: bool = false,

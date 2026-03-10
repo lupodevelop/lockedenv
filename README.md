@@ -1,31 +1,31 @@
-# env-lock
+# lockedenv
 
 > Ergonomic, type-safe, freeze-on-load environment variable management for Rust 🦀.
 
 **Read once, parse immediately, freeze forever.**
 
-[![crates.io](https://img.shields.io/crates/v/env-lock)](https://crates.io/crates/env-lock)
-[![docs.rs](https://img.shields.io/docsrs/env-lock)](https://docs.rs/env-lock)
-[![license](https://img.shields.io/crates/l/env-lock)](LICENSE)
+[![crates.io](https://img.shields.io/crates/v/lockedenv)](https://crates.io/crates/lockedenv)
+[![docs.rs](https://img.shields.io/docsrs/lockedenv)](https://docs.rs/lockedenv)
+[![license](https://img.shields.io/crates/l/lockedenv)](LICENSE)
 
 Environment variables are often a source of subtle bugs: they are read multiple times across the codebase, treated as untyped `String`s, and can silently fail if mutated at runtime. Testing them natively with `std::env::set_var` is unsafe in parallel contexts. 
 
-`env-lock` solves this cleanly: define a struct layout via a macro, enforce type-safe parsing at startup, and pass the generated, immutable struct to your application.
+`lockedenv` solves this cleanly: define a struct layout via a macro, enforce type-safe parsing at startup, and pass the generated, immutable struct to your application.
 
 ## Quickstart
 
-Add `env-lock` to your `Cargo.toml`:
+Add `lockedenv` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-env-lock = "0.1"
+lockedenv = "0.1"
 ```
 
 Use the `load!` macro to define and parse your configuration:
 
 ```rust
 fn main() {
-    let config = env_lock::load! {
+    let config = lockedenv::load! {
         PORT:         u16,
         DATABASE_URL: String,
         DEBUG:        bool                = false,
@@ -50,19 +50,19 @@ If a required variable is missing or cannot be parsed, `load!` **panics with a c
 
 ## The Macro Family
 
-`env-lock` provides straightforward variants for different needs:
+`lockedenv` provides straightforward variants for different needs:
 
 ```rust
 // 1. Panics on missing/bad config (Recommended for standard microservices)
-let config = env_lock::load! { PORT: u16, DS_URL: String };
+let config = lockedenv::load! { PORT: u16, DS_URL: String };
 
 // 2. Returns Result<_, EnvLockError> to manually handle or propagate failures
-let config = env_lock::try_load! { PORT: u16 }?;
+let config = lockedenv::try_load! { PORT: u16 }?;
 ```
 
 ### Thread-Safe Testing
 
-In tests, mutating the global environment is an anti-pattern. Let `env-lock` parse directly from a collection map:
+In tests, mutating the global environment is an anti-pattern. Let `lockedenv` parse directly from a collection map:
 
 ```rust
 #[test]
@@ -71,7 +71,7 @@ fn test_config_parsing() {
         ("PORT".into(), "8080".into())
     ]);
 
-    let config = env_lock::from_map! { map: map, PORT: u16 };
+    let config = lockedenv::from_map! { map: map, PORT: u16 };
     assert_eq!(config.PORT, 8080);
 }
 ```
@@ -88,13 +88,13 @@ fn test_config_parsing() {
 | `IpAddr`, `SocketAddr` | `"127.0.0.1"`, `"0.0.0.0:8080"` | |
 | `std::time::Duration` | `"30s"`, `"1h30m45s"`, `"500ms"` | Safe functional parser |
 | `Vec<T>` | `"a,b,c"`, `"80,443"` | Comma separated lists |
-| `env_lock::Secret<T>` | `"password"` | Redacts value in `Debug` and `Serialize` logs |
+| `lockedenv::Secret<T>` | "password" | Redacts value in `Debug` and `Serialize` logs |
 | `Option<T>` | `None` if absent | Overrides `FromEnvStr` absent behavior |
 
-You can add support for your own types by simply implementing `env_lock::parse::FromEnvStr`.
+You can add support for your own types by simply implementing `lockedenv::parse::FromEnvStr`.
 
 ```rust
-use env_lock::parse::FromEnvStr;
+use lockedenv::parse::FromEnvStr;
 
 struct Retries(u8);
 
@@ -115,7 +115,7 @@ impl FromEnvStr for Retries {
 Field names in the macro match the real environment variable name exactly, including case. By convention variables are `UPPER_SNAKE_CASE` and are accessed the same way on the generated struct:
 
 ```rust
-let config = env_lock::load! { DATABASE_URL: String, MAX_CONN: u32 };
+let config = lockedenv::load! { DATABASE_URL: String, MAX_CONN: u32 };
 println!("{} (max {})", config.DATABASE_URL, config.MAX_CONN);
 ```
 
@@ -126,7 +126,7 @@ struct AppConfig { db_url: String, max_conn: u32 }
 
 impl AppConfig {
     fn from_env() -> Self {
-        let raw = env_lock::load! { DATABASE_URL: String, MAX_CONN: u32 = 10 };
+        let raw = lockedenv::load! { DATABASE_URL: String, MAX_CONN: u32 = 10 };
         Self { db_url: raw.DATABASE_URL, max_conn: raw.MAX_CONN }
     }
 }
@@ -137,7 +137,7 @@ impl AppConfig {
 When implementing `FromEnvStr`, you can attach runtime hints to parse errors via `EnvLockError::with_hint`. This makes the fail-fast message much clearer for the operator:
 
 ```rust
-use env_lock::{parse::FromEnvStr, EnvLockError};
+use lockedenv::{parse::FromEnvStr, EnvLockError};
 
 struct Port(u16);
 
@@ -157,13 +157,13 @@ let e = EnvLockError::parse_error("TIMEOUT".into(), "5min".into(), "unknown unit
 
 ## Optional Features
 
-Extend `env-lock` by enabling features in `Cargo.toml`.
+Extend `lockedenv` by enabling features in `Cargo.toml`.
 
 | Feature | Description |
 |---------|-------------|
 | `dotenv` | Unlocks `load_dotenv!("path", { ... })` macros using [`dotenvy`](https://crates.io/crates/dotenvy). |
 | `serde`  | Automatically derives `Serialize` and `Deserialize` on your generated configuration struct. Great for debug logging / dumping config state. |
-| `watch`  | Provides `env_lock::watch!` for async, background-thread interval drift detection. Generates a listener delta without heavy file watchers. |
+| `watch`  | Provides `lockedenv::watch!` for async, background-thread interval drift detection. Generates a listener delta without heavy file watchers. |
 | `url-type`| Connects directly to the [`url`](https://crates.io/crates/url) crate for strong `url::Url` typing. |
 | `tracing`| Automatically logs the loaded configuration struct (with redacted secrets) at `INFO` level using the [`tracing`](https://crates.io/crates/tracing) crate upon successful load. |
 
@@ -173,10 +173,10 @@ If your environment variables share a common prefix, declare it once at the macr
 
 ```rust
 // Reads APP_PORT and APP_TOKEN from the environment
-let config = env_lock::load! {
+let config = lockedenv::load! {
     prefix = "APP_",
     PORT:  u16,
-    TOKEN: env_lock::Secret<String>,
+    TOKEN: lockedenv::Secret<String>,
 };
 ```
 
@@ -189,18 +189,18 @@ println!("{:?}", config); // { PORT: 8080, TOKEN: Secret([REDACTED]) }
 // Access the real value when needed:
 let token: &str = config.TOKEN.as_ref(); // AsRef<String>
 let owned: String = config.TOKEN.clone().into_inner();
-let s: env_lock::Secret<String> = String::from("raw").into(); // From<T>
+let s: lockedenv::Secret<String> = String::from("raw").into(); // From<T>
 ```
 
 ### Feature Showcase: Watcher
 Ideal for environments (like K8s or Docker) where external factors could unexpectedly orchestrate config shifts at runtime. Note that dropping the handle stops the watcher cleanly.
 
 ```rust
-// Requires: env-lock = { version = "0.1", features = ["watch"] }
-let config = env_lock::load! { TARGET_URL: String };
+// Requires: lockedenv = { version = "0.1", features = ["watch"] }
+let config = lockedenv::load! { TARGET_URL: String };
 
 // Checks every 5 seconds securely in the background.
-let _handle = env_lock::watch!(interval_secs = 5, on_drift = |key, old, new| {
+let _handle = lockedenv::watch!(interval_secs = 5, on_drift = |key, old, new| {
     eprintln!("Drift Alert: {} shifted from {} to {}", key, old, new);
 });
 ```

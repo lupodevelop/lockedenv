@@ -1,12 +1,12 @@
 [package]
-name = "env-lock"
+name = "lockedenv"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.70"
 description = "Type-safe, freeze-on-load environment variable management"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/lupodevelop/env-lock"
+repository = "https://github.com/lupodevelop/lockedenv" # repo name can stay unchanged or be renamed separately
 keywords = ["env", "config", "environment", "type-safe", "dotenv"]
 categories = ["config"]
 

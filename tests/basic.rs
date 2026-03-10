@@ -9,7 +9,7 @@ fn load_basic_types() {
     std::env::set_var("BASIC_PORT", "8080");
     std::env::set_var("BASIC_DB_URL", "postgres://localhost/test");
 
-    let config = env_lock::load! {
+    let config = lockedenv::load! {
         BASIC_PORT:   u16,
         BASIC_DB_URL: String,
         BASIC_DEBUG:  bool = false,
@@ -22,7 +22,7 @@ fn load_basic_types() {
 #[test]
 fn load_implements_clone_and_debug() {
     std::env::set_var("CLDBG_PORT", "99");
-    let cfg = env_lock::load! { CLDBG_PORT: u16 };
+    let cfg = lockedenv::load! { CLDBG_PORT: u16 };
     let cloned = cfg.clone();
     assert_eq!(cfg.CLDBG_PORT, cloned.CLDBG_PORT);
     let dbg = format!("{cfg:?}");
@@ -30,9 +30,9 @@ fn load_implements_clone_and_debug() {
 }
 
 #[test]
-fn try_load_returns_ok() -> Result<(), env_lock::EnvLockError> {
+fn try_load_returns_ok() -> Result<(), lockedenv::EnvLockError> {
     std::env::set_var("TRYLOAD_PORT", "1234");
-    let config = env_lock::try_load! { TRYLOAD_PORT: u16 }?;
+    let config = lockedenv::try_load! { TRYLOAD_PORT: u16 }?;
     assert_eq!(config.TRYLOAD_PORT, 1234);
     Ok(())
 }
@@ -40,7 +40,7 @@ fn try_load_returns_ok() -> Result<(), env_lock::EnvLockError> {
 #[test]
 fn try_load_returns_err_on_missing() {
     std::env::remove_var("TRYLOAD_ABSENT");
-    let result = env_lock::try_load! { TRYLOAD_ABSENT: u32 };
+    let result = lockedenv::try_load! { TRYLOAD_ABSENT: u32 };
     assert!(result.is_err());
     let msg = result.unwrap_err().to_string();
     assert!(msg.contains("TRYLOAD_ABSENT"), "error message should name the missing variable");
@@ -50,7 +50,7 @@ fn try_load_returns_err_on_missing() {
 fn load_panics_on_missing() {
     std::env::remove_var("LOAD_PANIC_VAR");
     let result = std::panic::catch_unwind(|| {
-        let _ = env_lock::load! { LOAD_PANIC_VAR: u32 };
+        let _ = lockedenv::load! { LOAD_PANIC_VAR: u32 };
     });
     assert!(result.is_err(), "load! should panic when a required variable is absent");
 }
@@ -59,7 +59,7 @@ fn load_panics_on_missing() {
 fn load_panics_on_bad_parse() {
     std::env::set_var("LOAD_BAD_INT", "not_a_number");
     let result = std::panic::catch_unwind(|| {
-        let _ = env_lock::load! { LOAD_BAD_INT: u32 };
+        let _ = lockedenv::load! { LOAD_BAD_INT: u32 };
     });
     assert!(result.is_err(), "load! should panic when the value cannot be parsed");
 }
@@ -67,34 +67,34 @@ fn load_panics_on_bad_parse() {
 #[test]
 fn load_option_absent() {
     std::env::remove_var("LOAD_OPT_ABSENT");
-    let config = env_lock::load! { LOAD_OPT_ABSENT: Option<String> };
+    let config = lockedenv::load! { LOAD_OPT_ABSENT: Option<String> };
     assert!(config.LOAD_OPT_ABSENT.is_none());
 }
 
 #[test]
 fn load_option_present() {
     std::env::set_var("LOAD_OPT_PRESENT", "hello");
-    let config = env_lock::load! { LOAD_OPT_PRESENT: Option<String> };
+    let config = lockedenv::load! { LOAD_OPT_PRESENT: Option<String> };
     assert_eq!(config.LOAD_OPT_PRESENT, Some("hello".to_string()));
 }
 
 #[test]
 fn load_string_with_spaces() {
     std::env::set_var("LOAD_SPACE_VAL", "hello world  ");
-    let config = env_lock::load! { LOAD_SPACE_VAL: String };
+    let config = lockedenv::load! { LOAD_SPACE_VAL: String };
     assert_eq!(config.LOAD_SPACE_VAL, "hello world  ", "String values should not be trimmed");
 }
 
 #[test]
 fn load_default_overridden_by_env() {
     std::env::set_var("LOAD_WITH_DEF", "999");
-    let config = env_lock::load! { LOAD_WITH_DEF: u32 = 1 };
+    let config = lockedenv::load! { LOAD_WITH_DEF: u32 = 1 };
     assert_eq!(config.LOAD_WITH_DEF, 999, "env var should override the default");
 }
 
 #[test]
 fn load_default_used_when_absent() {
     std::env::remove_var("LOAD_USES_DEF");
-    let config = env_lock::load! { LOAD_USES_DEF: u32 = 42 };
+    let config = lockedenv::load! { LOAD_USES_DEF: u32 = 42 };
     assert_eq!(config.LOAD_USES_DEF, 42, "default should be used when variable is absent");
 }

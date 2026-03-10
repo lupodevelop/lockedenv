@@ -132,7 +132,7 @@ macro_rules! load_internal {
 
     (@log $cfg:ident) => {
         #[cfg(feature = "tracing")]
-        $crate::tracing::info!(config = ?$cfg, "env-lock loaded");
+        $crate::tracing::info!(config = ?$cfg, "lockedenv loaded");
     };
 
     // None branch without default: use missing_value (Option<T> → Ok(None), others → Err)
@@ -162,7 +162,7 @@ macro_rules! load_internal {
 /// Requires feature `dotenv`.
 ///
 /// ```rust,no_run
-/// let config = env_lock::load_dotenv! {
+/// let config = lockedenv::load_dotenv! {
 ///     path: ".env",
 ///     PORT: u16,
 ///     DATABASE_URL: String,
@@ -184,8 +184,8 @@ macro_rules! load_dotenv {
 /// Requires feature `dotenv`.
 ///
 /// ```rust,no_run
-/// fn main() -> Result<(), env_lock::EnvLockError> {
-///     let config = env_lock::try_load_dotenv! { path: ".env.local", PORT: u16 }?;
+/// fn main() -> Result<(), lockedenv::EnvLockError> {
+///     let config = lockedenv::try_load_dotenv! { path: ".env.local", PORT: u16 }?;
 ///     Ok(())
 /// }
 /// ```
@@ -214,7 +214,7 @@ macro_rules! try_load_dotenv {
 /// Requires feature `watch`.
 ///
 /// ```rust,no_run
-/// let _handle = env_lock::watch!(interval_secs = 60, on_drift = |key, _old, _new| {
+/// let _handle = lockedenv::watch!(interval_secs = 60, on_drift = |key, _old, _new| {
 ///     eprintln!("env drift detected: {}", key);
 /// });
 /// // Drop _handle to stop the watcher gracefully.
