@@ -4,9 +4,7 @@
 
 **Read once, parse immediately, freeze forever.**
 
-[![crates.io](https://img.shields.io/crates/v/lockedenv)](https://crates.io/crates/lockedenv)
-[![docs.rs](https://img.shields.io/docsrs/lockedenv)](https://docs.rs/lockedenv)
-[![license](https://img.shields.io/crates/l/lockedenv)](LICENSE)
+[![crates.io](https://img.shields.io/crates/v/lockedenv.svg)](https://crates.io/crates/lockedenv) [![docs.rs](https://img.shields.io/docsrs/lockedenv)](https://docs.rs/lockedenv) [![license-MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT) [![license-Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 
 Environment variables are often a source of subtle bugs: they are read multiple times across the codebase, treated as untyped `String`s, and can silently fail if mutated at runtime. Testing them natively with `std::env::set_var` is unsafe in parallel contexts. 
 
