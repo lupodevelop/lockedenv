@@ -5,7 +5,7 @@ use zeroize::Zeroize;
 
 /// Trait for converting an environment string into a typed value.
 ///
-/// Implement this for custom types to use them with the `env-lock` macros.
+/// Implement this for custom types to use them with the `lockedenv` macros.
 /// The default `missing_value` treats an absent key as an error; `Option<T>`
 /// overrides that behavior.  Set `REDACT_IN_ERRORS = true` to redact raw
 /// values from error messages (useful for secrets).
@@ -176,7 +176,7 @@ impl<T: FromEnvStr> FromEnvStr for Vec<T> {
 /// ```rust
 /// let m: std::collections::HashMap<String, String> =
 ///     [("TOKEN".into(), "secret".into())].into_iter().collect();
-/// let cfg = env_lock::from_map! { map: m, TOKEN: env_lock::Secret<String> };
+/// let cfg = lockedenv::from_map! { map: m, TOKEN: lockedenv::Secret<String> };
 /// assert_eq!(cfg.TOKEN.as_ref(), "secret");
 /// // Debug never leaks the value:
 /// assert!(format!("{:?}", cfg).contains("[REDACTED]"));

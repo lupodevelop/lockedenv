@@ -1,6 +1,6 @@
 #[cfg(feature = "watch")]
 mod drift {
-    use env_lock::load;
+    use lockedenv::load;
     use std::sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
@@ -15,7 +15,7 @@ mod drift {
         let seen = Arc::new(AtomicBool::new(false));
         let seen2 = seen.clone();
 
-        let _handle = env_lock::watch!(
+        let _handle = lockedenv::watch!(
             interval_ms = 10,
             on_drift = move |key: &str, _old: &str, _new: &str| {
                 if key == "DRIFT_CHANGE" {
@@ -41,7 +41,7 @@ mod drift {
         let removed = Arc::new(AtomicBool::new(false));
         let removed2 = removed.clone();
 
-        let _handle = env_lock::watch!(
+        let _handle = lockedenv::watch!(
             interval_ms = 10,
             on_drift = move |key: &str, _old: &str, new: &str| {
                 if key == "DRIFT_REMOVAL" && new == "<removed>" {
@@ -66,7 +66,7 @@ mod drift {
         let call_count = Arc::new(AtomicUsize::new(0));
         let cc2 = call_count.clone();
 
-        let handle = env_lock::watch!(
+        let handle = lockedenv::watch!(
             interval_ms = 10,
             on_drift = move |key: &str, _old: &str, _new: &str| {
                 if key == "DRIFT_STOP_TEST" {
@@ -103,7 +103,7 @@ mod drift {
         let count = Arc::new(AtomicUsize::new(0));
         let c2 = count.clone();
 
-        let _handle = env_lock::watch!(
+        let _handle = lockedenv::watch!(
             interval_ms = 10,
             on_drift = move |_key: &str, _old: &str, _new: &str| {
                 c2.fetch_add(1, Ordering::SeqCst);

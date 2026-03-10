@@ -14,7 +14,7 @@ mod dotenv_tests {
     /// A non-existent .env file is silently ignored (Ok returned).
     #[test]
     fn missing_file_is_ok() {
-        let result = env_lock::dotenv::load_file("/tmp/__env_lock_nonexistent_file__.env");
+        let result = lockedenv::dotenv::load_file("/tmp/__env_lock_nonexistent_file__.env");
         assert!(result.is_ok(), "missing .env file should not be an error");
     }
 
@@ -29,7 +29,7 @@ mod dotenv_tests {
         std::env::remove_var("DOTENV_LOAD_VAR_A");
         std::env::remove_var("DOTENV_LOAD_VAR_B");
 
-        env_lock::dotenv::load_file(path.to_str().unwrap()).unwrap();
+        lockedenv::dotenv::load_file(path.to_str().unwrap()).unwrap();
 
         assert_eq!(std::env::var("DOTENV_LOAD_VAR_A").unwrap(), "hello");
         assert_eq!(std::env::var("DOTENV_LOAD_VAR_B").unwrap(), "42");
@@ -43,7 +43,7 @@ mod dotenv_tests {
         let path = tmp_env_file("no_overwrite", "DOTENV_EXISTING=from_file\n");
         std::env::set_var("DOTENV_EXISTING", "from_env");
 
-        env_lock::dotenv::load_file(path.to_str().unwrap()).unwrap();
+        lockedenv::dotenv::load_file(path.to_str().unwrap()).unwrap();
 
         assert_eq!(
             std::env::var("DOTENV_EXISTING").unwrap(),
@@ -58,7 +58,7 @@ mod dotenv_tests {
     fn invalid_file_returns_err() {
         // An assignment with an unclosed quote is invalid in dotenvy.
         let path = tmp_env_file("invalid", "BROKEN_VAR=\"unclosed\n");
-        let result = env_lock::dotenv::load_file(path.to_str().unwrap());
+        let result = lockedenv::dotenv::load_file(path.to_str().unwrap());
         // dotenvy may or may not error on this; what matters is the function
         // doesn't panic and returns an Err/Ok consistently.
         let _ = result; // just assert it doesn't panic
@@ -71,7 +71,7 @@ mod dotenv_tests {
         let path = tmp_env_file("macro", "DOTENV_MACRO_PORT=7777\n");
         std::env::remove_var("DOTENV_MACRO_PORT");
 
-        let config = env_lock::load_dotenv! {
+        let config = lockedenv::load_dotenv! {
             path: path.to_str().unwrap(),
             DOTENV_MACRO_PORT: u16,
         };

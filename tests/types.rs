@@ -7,7 +7,7 @@
 )]
 // Tests for FromEnvStr implementations.
 // All tests here use from_map! to avoid touching std::env (thread-safe).
-use env_lock::parse::FromEnvStr;
+use lockedenv::parse::FromEnvStr;
 use std::time::Duration;
 
 fn hmap(pairs: &[(&str, &str)]) -> std::collections::HashMap<String, String> {
@@ -125,7 +125,7 @@ fn duration_invalid_inputs() {
 #[test]
 fn option_present_and_absent() {
     let m = hmap(&[("OPT_PORT", "3000")]);
-    let config = env_lock::from_map! {
+    let config = lockedenv::from_map! {
         map: m,
         OPT_PORT:   Option<u16>,
         OPT_EXTRA:  Option<String>,
@@ -138,14 +138,14 @@ fn option_present_and_absent() {
 fn option_empty_string_is_none() {
     // An empty string in the map is treated as None for Option<T>
     let m = hmap(&[("OPT_EMPTY", "")]);
-    let config = env_lock::from_map! { map: m, OPT_EMPTY: Option<u32> };
+    let config = lockedenv::from_map! { map: m, OPT_EMPTY: Option<u32> };
     assert!(config.OPT_EMPTY.is_none(), "empty string should map to None");
 }
 
 #[test]
 fn option_parse_error_propagates() {
     let m = hmap(&[("OPT_BAD", "not_a_number")]);
-    let result = env_lock::try_from_map! { map: m, OPT_BAD: Option<u32> };
+    let result = lockedenv::try_from_map! { map: m, OPT_BAD: Option<u32> };
     assert!(result.is_err(), "invalid value inside Option should still error");
 }
 
@@ -154,7 +154,7 @@ fn option_parse_error_propagates() {
 #[test]
 fn try_from_map_error_names_variable() {
     let m: std::collections::HashMap<String, String> = std::collections::HashMap::default();
-    let r = env_lock::try_from_map! { map: m, MISSING_PORT: u16 };
+    let r = lockedenv::try_from_map! { map: m, MISSING_PORT: u16 };
     assert!(r.is_err());
     let msg = r.unwrap_err().to_string();
     assert!(msg.contains("MISSING_PORT"), "error should mention variable: {msg}");
@@ -163,7 +163,7 @@ fn try_from_map_error_names_variable() {
 #[test]
 fn parse_error_message_has_value_and_var() {
     let m = hmap(&[("ERR_PORT", "abc")]);
-    let r = env_lock::try_from_map! { map: m, ERR_PORT: u16 };
+    let r = lockedenv::try_from_map! { map: m, ERR_PORT: u16 };
     let msg = r.unwrap_err().to_string();
     assert!(msg.contains("ERR_PORT"), "error message: {msg}");
     assert!(msg.contains("abc"),      "error message: {msg}");
@@ -186,7 +186,7 @@ fn url_type_parsing() {
 #[test]
 fn url_from_map() {
     let m = hmap(&[("API_BASE", "https://api.example.com")]);
-    let config = env_lock::from_map! { map: m, API_BASE: url::Url };
+    let config = lockedenv::from_map! { map: m, API_BASE: url::Url };
     assert_eq!(config.API_BASE.host_str(), Some("api.example.com"));
 }
 
@@ -196,7 +196,7 @@ fn url_from_map() {
 #[test]
 fn derives_serde_traits() {
     let m = hmap(&[("SERDE_PORT", "80"), ("SERDE_HOST", "abc")]);
-    let config = env_lock::from_map! {
+    let config = lockedenv::from_map! {
         map: m,
         SERDE_PORT: u16,
         SERDE_HOST: String,
@@ -221,7 +221,7 @@ fn vec_parsing() {
         ("EMPTY", "   "),
         ("SINGLE", "1234"),
     ]);
-    let config = env_lock::from_map! {
+    let config = lockedenv::from_map! {
         map: m,
         PORTS: Vec<u16>,
         EMPTY: Vec<String>,
@@ -237,11 +237,11 @@ fn vec_parsing() {
 
 #[test]
 fn secret_parsing_and_debug() {
-    use env_lock::Secret;
+    use lockedenv::Secret;
     use std::borrow::Borrow;
 
     let m = hmap(&[("PASSWORD", "my_super_secret")]);
-    let config = env_lock::from_map! {
+    let config = lockedenv::from_map! {
         map: m,
         PASSWORD: Secret<String>,
     };
@@ -276,7 +276,7 @@ fn secret_parsing_and_debug() {
 #[test]
 fn vec_error_contains_index() {
     let m = hmap(&[("PORTS", "80,nope,443")]);
-    let r = env_lock::try_from_map! {
+    let r = lockedenv::try_from_map! {
         map: m,
         PORTS: Vec<u16>,
     };
@@ -293,7 +293,7 @@ fn map_prefix_support() {
         ("APP_HOST", "localhost"),
     ]);
 
-    let config = env_lock::from_map! {
+    let config = lockedenv::from_map! {
         map: m,
         prefix = "APP_",
         PORT: u16,
@@ -307,14 +307,14 @@ fn map_prefix_support() {
 #[test]
 fn partial_eq_on_generated_struct() {
     let m = hmap(&[("VAL", "42")]);
-    let config = env_lock::from_map! { map: m, VAL: u32 };
+    let config = lockedenv::from_map! { map: m, VAL: u32 };
     // PartialEq: a struct should equal its own clone
     assert_eq!(config, config.clone());
     // and differ after a known change (different parse, different config)
     let m2 = hmap(&[("VAL", "99")]);
     // We can't compare two separate macro expansions (distinct anonymous types),
     // but we can confirm the derived impl works via clone round-trip:
-    let config2 = env_lock::from_map! { map: m2, VAL: u32 };
+    let config2 = lockedenv::from_map! { map: m2, VAL: u32 };
     assert_eq!(config2, config2.clone());
     assert_ne!(config.VAL, config2.VAL);
 }
@@ -323,26 +323,26 @@ fn partial_eq_on_generated_struct() {
 
 #[test]
 fn redact_propagated_in_option_secret() {
-    use env_lock::parse::FromEnvStr;
+    use lockedenv::parse::FromEnvStr;
     // Option<Secret<String>> must inherit REDACT_IN_ERRORS = true from Secret
     assert!(
-        <Option<env_lock::Secret<String>> as FromEnvStr>::REDACT_IN_ERRORS,
+        <Option<lockedenv::Secret<String>> as FromEnvStr>::REDACT_IN_ERRORS,
         "Option<Secret<T>> must propagate REDACT_IN_ERRORS"
     );
 }
 
 #[test]
 fn redact_propagated_in_vec_secret() {
-    use env_lock::parse::FromEnvStr;
+    use lockedenv::parse::FromEnvStr;
     assert!(
-        <Vec<env_lock::Secret<String>> as FromEnvStr>::REDACT_IN_ERRORS,
+        <Vec<lockedenv::Secret<String>> as FromEnvStr>::REDACT_IN_ERRORS,
         "Vec<Secret<T>> must propagate REDACT_IN_ERRORS"
     );
 }
 
 #[test]
 fn redact_false_for_plain_types() {
-    use env_lock::parse::FromEnvStr;
+    use lockedenv::parse::FromEnvStr;
     assert!(!<String as FromEnvStr>::REDACT_IN_ERRORS);
     assert!(!<u32 as FromEnvStr>::REDACT_IN_ERRORS);
     assert!(!<Vec<u16> as FromEnvStr>::REDACT_IN_ERRORS);
@@ -353,7 +353,7 @@ fn redact_false_for_plain_types() {
 fn secret_parse_error_redacts_in_map() {
     // When a Secret<u32> receives an unparseable value, the error must NOT leak the raw value
     let m = hmap(&[("TOKEN", "not_a_number")]);
-    let r = env_lock::try_from_map! { map: m, TOKEN: env_lock::Secret<u32> };
+    let r = lockedenv::try_from_map! { map: m, TOKEN: lockedenv::Secret<u32> };
     let msg = r.unwrap_err().to_string();
     assert!(msg.contains("[REDACTED]"), "secret error: {msg}");
     assert!(!msg.contains("not_a_number"), "raw value leaked: {msg}");
@@ -362,7 +362,7 @@ fn secret_parse_error_redacts_in_map() {
 #[test]
 fn option_secret_parse_error_redacts_in_map() {
     let m = hmap(&[("TOKEN", "bad")]);
-    let r = env_lock::try_from_map! { map: m, TOKEN: Option<env_lock::Secret<String>> };
+    let r = lockedenv::try_from_map! { map: m, TOKEN: Option<lockedenv::Secret<String>> };
     // Option<Secret<String>> parses the non-empty string "bad" as Some(Secret("bad")) — succeeds
     assert!(r.is_ok());
 }
@@ -372,7 +372,7 @@ fn option_secret_parse_error_redacts_in_map() {
 #[test]
 fn secret_zeroize_clears_inner() {
     use zeroize::Zeroize;
-    let mut s = env_lock::Secret::new("hello".to_string());
+    let mut s = lockedenv::Secret::new("hello".to_string());
     s.zeroize();
     // After zeroize, the inner String should be empty (zeroed)
     assert!(s.as_ref().is_empty(), "zeroized secret must be empty");
@@ -381,7 +381,7 @@ fn secret_zeroize_clears_inner() {
 #[test]
 fn secret_clone_is_independent() {
     use zeroize::Zeroize;
-    let mut original = env_lock::Secret::new("data".to_string());
+    let mut original = lockedenv::Secret::new("data".to_string());
     let cloned = original.clone();
     original.zeroize();
     // Clone must be unaffected
@@ -391,23 +391,23 @@ fn secret_clone_is_independent() {
 
 #[test]
 fn secret_eq_and_ne() {
-    let a = env_lock::Secret::new("same".to_string());
-    let b = env_lock::Secret::new("same".to_string());
-    let c = env_lock::Secret::new("diff".to_string());
+    let a = lockedenv::Secret::new("same".to_string());
+    let b = lockedenv::Secret::new("same".to_string());
+    let c = lockedenv::Secret::new("diff".to_string());
     assert_eq!(a, b);
     assert_ne!(a, c);
 }
 
 #[test]
 fn secret_new_and_from_are_equivalent() {
-    let from_new = env_lock::Secret::new(42u32);
-    let from_trait: env_lock::Secret<u32> = 42u32.into();
+    let from_new = lockedenv::Secret::new(42u32);
+    let from_trait: lockedenv::Secret<u32> = 42u32.into();
     assert_eq!(from_new, from_trait);
 }
 
 #[test]
 fn secret_into_inner_returns_value() {
-    let s = env_lock::Secret::new("payload".to_string());
+    let s = lockedenv::Secret::new("payload".to_string());
     let inner = s.into_inner();
     assert_eq!(inner, "payload");
 }
@@ -417,21 +417,21 @@ fn secret_into_inner_returns_value() {
 #[test]
 fn macro_zero_fields() {
     let m: std::collections::HashMap<String, String> = std::collections::HashMap::default();
-    let config = env_lock::from_map! { map: m, };
+    let config = lockedenv::from_map! { map: m, };
     let _ = format!("{config:?}"); // Debug works
 }
 
 #[test]
 fn macro_single_field() {
     let m = hmap(&[("X", "1")]);
-    let config = env_lock::from_map! { map: m, X: u32 };
+    let config = lockedenv::from_map! { map: m, X: u32 };
     assert_eq!(config.X, 1);
 }
 
 #[test]
 fn macro_nested_option_vec() {
     let m = hmap(&[("PORTS", "80,443")]);
-    let config = env_lock::from_map! {
+    let config = lockedenv::from_map! {
         map: m,
         PORTS: Option<Vec<u16>>,
     };
@@ -441,14 +441,14 @@ fn macro_nested_option_vec() {
 #[test]
 fn macro_nested_option_vec_absent() {
     let m: std::collections::HashMap<String, String> = std::collections::HashMap::default();
-    let config = env_lock::from_map! { map: m, PORTS: Option<Vec<u16>> };
+    let config = lockedenv::from_map! { map: m, PORTS: Option<Vec<u16>> };
     assert!(config.PORTS.is_none());
 }
 
 #[test]
 fn macro_all_defaults_no_entries() {
     let m: std::collections::HashMap<String, String> = std::collections::HashMap::default();
-    let config = env_lock::from_map! {
+    let config = lockedenv::from_map! {
         map: m,
         A: u32 = 1,
         B: String = "default".to_string(),
@@ -462,7 +462,7 @@ fn macro_all_defaults_no_entries() {
 #[test]
 fn try_from_map_with_prefix() {
     let m = hmap(&[("SVC_PORT", "9090"), ("SVC_HOST", "0.0.0.0")]);
-    let r = env_lock::try_from_map! {
+    let r = lockedenv::try_from_map! {
         map: m,
         prefix = "SVC_",
         PORT: u16,
@@ -477,7 +477,7 @@ fn try_from_map_with_prefix() {
 fn from_map_panics_on_missing() {
     let m: std::collections::HashMap<String, String> = std::collections::HashMap::default();
     let result = std::panic::catch_unwind(|| {
-        env_lock::from_map! { map: m, REQUIRED: u32 }
+        lockedenv::from_map! { map: m, REQUIRED: u32 }
     });
     assert!(result.is_err(), "from_map! must panic on missing required field");
 }
@@ -486,7 +486,7 @@ fn from_map_panics_on_missing() {
 fn from_map_panics_on_bad_parse() {
     let m = hmap(&[("BAD", "xyz")]);
     let result = std::panic::catch_unwind(|| {
-        env_lock::from_map! { map: m, BAD: u32 }
+        lockedenv::from_map! { map: m, BAD: u32 }
     });
     assert!(result.is_err(), "from_map! must panic on bad parse");
 }
@@ -496,26 +496,26 @@ fn from_map_panics_on_bad_parse() {
 #[test]
 fn error_is_send_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync::<env_lock::EnvLockError>();
+    assert_send_sync::<lockedenv::EnvLockError>();
 }
 
 #[test]
 fn error_is_clone() {
-    let e = env_lock::EnvLockError::missing("X".into());
+    let e = lockedenv::EnvLockError::missing("X".into());
     let e2 = e.clone();
     assert_eq!(e.to_string(), e2.to_string());
 }
 
 #[test]
 fn with_hint_noop_on_missing() {
-    let e = env_lock::EnvLockError::missing("X".into()).with_hint("ignored");
+    let e = lockedenv::EnvLockError::missing("X".into()).with_hint("ignored");
     let s = e.to_string();
     assert!(!s.contains("ignored"), "hint on Missing should be no-op: {s}");
 }
 
 #[test]
 fn with_hint_noop_on_dotenv() {
-    let e = env_lock::EnvLockError::dotenv(".env".into(), "io error".into())
+    let e = lockedenv::EnvLockError::dotenv(".env".into(), "io error".into())
         .with_hint("ignored");
     let s = e.to_string();
     assert!(!s.contains("ignored"), "hint on Dotenv should be no-op: {s}");
@@ -523,7 +523,7 @@ fn with_hint_noop_on_dotenv() {
 
 #[test]
 fn parse_error_display_without_hint() {
-    let e = env_lock::EnvLockError::parse_error("X".into(), "y".into(), "z");
+    let e = lockedenv::EnvLockError::parse_error("X".into(), "y".into(), "z");
     let s = e.to_string();
     assert!(!s.contains("hint:"), "no hint should appear: {s}");
 }
@@ -531,7 +531,7 @@ fn parse_error_display_without_hint() {
 #[test]
 fn dotenv_error_display_always_available() {
     // Dotenv variant can be constructed and displayed even without the dotenv feature
-    let e = env_lock::EnvLockError::dotenv("/path".into(), "parse error".into());
+    let e = lockedenv::EnvLockError::dotenv("/path".into(), "parse error".into());
     let s = e.to_string();
     assert!(s.contains("/path"));
     assert!(s.contains("parse error"));
@@ -542,7 +542,7 @@ fn dotenv_error_display_always_available() {
 #[test]
 fn string_value_preserves_unicode_and_whitespace() {
     let m = hmap(&[("U", "  ciao 🦀\tnewline\n")]);
-    let cfg = env_lock::from_map! { map: m, U: String };
+    let cfg = lockedenv::from_map! { map: m, U: String };
     assert_eq!(cfg.U, "  ciao 🦀\tnewline\n");
 }
 
@@ -596,14 +596,14 @@ fn vec_of_bools() {
 #[test]
 fn option_secret_string_present() {
     let m = hmap(&[("TOK", "abc")]);
-    let cfg = env_lock::from_map! { map: m, TOK: Option<env_lock::Secret<String>> };
+    let cfg = lockedenv::from_map! { map: m, TOK: Option<lockedenv::Secret<String>> };
     assert_eq!(*cfg.TOK.unwrap(), "abc");
 }
 
 #[test]
 fn option_secret_string_absent() {
     let m: std::collections::HashMap<String, String> = std::collections::HashMap::default();
-    let cfg = env_lock::from_map! { map: m, TOK: Option<env_lock::Secret<String>> };
+    let cfg = lockedenv::from_map! { map: m, TOK: Option<lockedenv::Secret<String>> };
     assert!(cfg.TOK.is_none());
 }
 
@@ -638,13 +638,13 @@ fn missing_value_trait_defaults() {
     assert!(u32::missing_value("K").is_err());
     assert!(String::missing_value("K").is_err());
     assert_eq!(Option::<u32>::missing_value("K").unwrap(), None);
-    assert!(env_lock::Secret::<String>::missing_value("K").is_err());
+    assert!(lockedenv::Secret::<String>::missing_value("K").is_err());
 }
 
 #[test]
 fn option_duration_present_and_absent() {
     let m = hmap(&[("T", "5s")]);
-    let cfg = env_lock::from_map! { map: m, T: Option<Duration>, T2: Option<Duration> };
+    let cfg = lockedenv::from_map! { map: m, T: Option<Duration>, T2: Option<Duration> };
     assert_eq!(cfg.T, Some(Duration::from_secs(5)));
     assert!(cfg.T2.is_none());
 }
@@ -652,7 +652,7 @@ fn option_duration_present_and_absent() {
 #[test]
 fn macro_mix_required_optional_default() {
     let m = hmap(&[("REQ", "hello")]);
-    let cfg = env_lock::from_map! { map: m, REQ: String, OPT: Option<u32>, DEF: u32 = 42 };
+    let cfg = lockedenv::from_map! { map: m, REQ: String, OPT: Option<u32>, DEF: u32 = 42 };
     assert_eq!(cfg.REQ, "hello");
     assert!(cfg.OPT.is_none());
     assert_eq!(cfg.DEF, 42);
@@ -661,7 +661,7 @@ fn macro_mix_required_optional_default() {
 #[test]
 fn macro_secret_field_redacts_in_debug() {
     let m = hmap(&[("API_KEY", "sk-12345"), ("DB_PASS", "p@ssw0rd!")]);
-    let cfg = env_lock::from_map! { map: m, API_KEY: env_lock::Secret<String>, DB_PASS: env_lock::Secret<String> };
+    let cfg = lockedenv::from_map! { map: m, API_KEY: lockedenv::Secret<String>, DB_PASS: lockedenv::Secret<String> };
     let dbg = format!("{cfg:?}");
     assert!(!dbg.contains("sk-12345"));
     assert!(!dbg.contains("p@ssw0rd!"));
@@ -671,7 +671,7 @@ fn macro_secret_field_redacts_in_debug() {
 #[test]
 fn all_optional_fields_empty_map() {
     let m: std::collections::HashMap<String, String> = std::collections::HashMap::default();
-    let cfg = env_lock::from_map! { map: m, A: Option<String>, B: Option<u32>, C: Option<bool> };
+    let cfg = lockedenv::from_map! { map: m, A: Option<String>, B: Option<u32>, C: Option<bool> };
     assert!(cfg.A.is_none());
     assert!(cfg.B.is_none());
     assert!(cfg.C.is_none());
@@ -680,15 +680,15 @@ fn all_optional_fields_empty_map() {
 #[test]
 fn multiple_errors_first_field_wins() {
     let m: std::collections::HashMap<String, String> = std::collections::HashMap::default();
-    let r = env_lock::try_from_map! { map: m, MISSING_FIRST: u32, MISSING_SECOND: u32 };
+    let r = lockedenv::try_from_map! { map: m, MISSING_FIRST: u32, MISSING_SECOND: u32 };
     let msg = r.unwrap_err().to_string();
     assert!(msg.contains("MISSING_FIRST"));
 }
 
 #[test]
 fn error_implements_std_error() {
-    let e1: Box<dyn std::error::Error> = Box::new(env_lock::EnvLockError::missing("X".into()));
+    let e1: Box<dyn std::error::Error> = Box::new(lockedenv::EnvLockError::missing("X".into()));
     assert!(e1.source().is_none());
-    let e2: Box<dyn std::error::Error> = Box::new(env_lock::EnvLockError::parse_error("Y".into(), "z".into(), "bad"));
+    let e2: Box<dyn std::error::Error> = Box::new(lockedenv::EnvLockError::parse_error("Y".into(), "z".into(), "bad"));
     assert!(e2.to_string().contains('Y'));
 }

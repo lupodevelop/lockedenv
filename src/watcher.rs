@@ -34,7 +34,7 @@ pub fn start(
     let (tx, rx) = mpsc::sync_channel::<()>(1);
 
     std::thread::Builder::new()
-        .name("env-lock-watcher".into())
+        .name("lockedenv-watcher".into())
         .spawn(move || {
             let mut snapshot: HashMap<String, String> = std::env::vars().collect();
 
@@ -70,7 +70,7 @@ pub fn start(
 
                 if result.is_err() {
                     #[cfg(feature = "tracing")]
-                    tracing::error!("env-lock watcher: on_drift callback panicked");
+                    tracing::error!("lockedenv watcher: on_drift callback panicked");
                 }
 
                 // Always advance the snapshot — even after a panic — so the
@@ -78,7 +78,7 @@ pub fn start(
                 snapshot = current;
             }
         })
-        .expect("failed to spawn env-lock-watcher thread");
+        .expect("failed to spawn lockedenv-watcher thread");
 
     WatchHandle { tx }
 }
