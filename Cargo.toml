@@ -1,6 +1,6 @@
 [package]
 name = "lockedenv"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.70"
 description = "Type-safe, freeze-on-load environment variable management"
@@ -27,4 +27,3 @@ zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 serde_json = "1.0"
-zeroize = "1"

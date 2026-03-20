@@ -25,9 +25,19 @@ impl Drop for WatchHandle {
 }
 
 /// Start the watcher thread, calling `on_drift(key, old, new)` on changes.
+///
+/// Only the variables listed in `keys` are monitored.  On each tick the
+/// watcher reads exactly those keys via [`std::env::var`] — O(watched vars)
+/// instead of O(all env vars) — making it safe even in processes that have
+/// hundreds of environment variables.
+///
+/// `"<removed>"` is passed as `new` when a variable disappears;
+/// `"<missing>"` is passed as `old` when a variable is newly added.
+///
 /// Returns a `WatchHandle`; panics if the thread cannot be spawned.
 #[allow(clippy::missing_panics_doc)]
 pub fn start(
+    keys: Vec<String>,
     interval: Duration,
     mut on_drift: impl FnMut(&str, &str, &str) + Send + 'static,
 ) -> WatchHandle {
@@ -36,7 +46,11 @@ pub fn start(
     std::thread::Builder::new()
         .name("lockedenv-watcher".into())
         .spawn(move || {
-            let mut snapshot: HashMap<String, String> = std::env::vars().collect();
+            // Snapshot only the watched keys — avoids iterating all env vars.
+            let mut snapshot: HashMap<String, String> = keys
+                .iter()
+                .filter_map(|k| std::env::var(k).ok().map(|v| (k.clone(), v)))
+                .collect();
 
             loop {
                 // Block until a stop signal arrives or the interval elapses.
@@ -45,27 +59,17 @@ pub fn start(
                     Err(mpsc::RecvTimeoutError::Timeout) => {}
                 }
 
-                let current: HashMap<String, String> = std::env::vars().collect();
-
-                // Detect drifts with a pure functional pipeline, then fire the
-                // callback inside `catch_unwind` so a panicking consumer never
-                // kills the watcher thread silently.
+                // Check only the watched keys — never touches unrelated vars.
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    current
-                        .iter()
-                        .filter_map(|(k, v)| {
-                            snapshot.get(k).map_or_else(
-                                || Some((k.as_str(), "<missing>", v.as_str())),
-                                |old| (old != v).then_some((k.as_str(), old.as_str(), v.as_str())),
-                            )
-                        })
-                        .chain(
-                            snapshot
-                                .iter()
-                                .filter(|(k, _)| !current.contains_key(k.as_str()))
-                                .map(|(k, old)| (k.as_str(), old.as_str(), "<removed>")),
-                        )
-                        .for_each(|(k, old, new)| on_drift(k, old, new));
+                    for key in &keys {
+                        let current = std::env::var(key).ok();
+                        match (snapshot.get(key.as_str()), current.as_deref()) {
+                            (Some(old), Some(new)) if old != new => on_drift(key, old, new),
+                            (Some(old), None) => on_drift(key, old, "<removed>"),
+                            (None, Some(new)) => on_drift(key, "<missing>", new),
+                            _ => {}
+                        }
+                    }
                 }));
 
                 if result.is_err() {
@@ -75,7 +79,16 @@ pub fn start(
 
                 // Always advance the snapshot — even after a panic — so the
                 // same set of drifts is not re-reported on the next tick.
-                snapshot = current;
+                for key in &keys {
+                    match std::env::var(key).ok() {
+                        Some(v) => {
+                            snapshot.insert(key.clone(), v);
+                        }
+                        None => {
+                            snapshot.remove(key.as_str());
+                        }
+                    }
+                }
             }
         })
         .expect("failed to spawn lockedenv-watcher thread");

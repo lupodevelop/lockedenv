@@ -6,7 +6,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/lockedenv.svg)](https://crates.io/crates/lockedenv) [![docs.rs](https://img.shields.io/docsrs/lockedenv)](https://docs.rs/lockedenv) [![license-MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT) [![license-Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 
-Environment variables are often a source of subtle bugs: they are read multiple times across the codebase, treated as untyped `String`s, and can silently fail if mutated at runtime. Testing them natively with `std::env::set_var` is unsafe in parallel contexts. 
+Environment variables are often a source of subtle bugs: they are read multiple times across the codebase, treated as untyped `String`s, and can silently fail if mutated at runtime. Testing them natively with `std::env::set_var` is unsafe in parallel contexts.
 
 `lockedenv` solves this cleanly: define a struct layout via a macro, enforce type-safe parsing at startup, and pass the generated, immutable struct to your application.
 
@@ -16,7 +16,7 @@ Add `lockedenv` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-lockedenv = "0.1"
+lockedenv = "0.2"
 ```
 
 Use the `load!` macro to define and parse your configuration:
@@ -77,17 +77,17 @@ fn test_config_parsing() {
 ## Supported Types (Zero extra dependencies)
 
 | Rust Type | Syntax Example | Notes |
-|-----------|----------------|-------|
+| --- | --- | --- |
 | `String`, `char` | `"value"`, `'a'` | |
 | Integer primitives | `8080`, `-20` | Native bounds checked |
 | Floating point | `"3.14"` | |
 | `bool` | `"true"`, `"1"`, `"yes"`, `"false"` | Case-insensitive |
 | `std::path::PathBuf` | `"/etc/hosts"` | Does not check disk presence |
 | `IpAddr`, `SocketAddr` | `"127.0.0.1"`, `"0.0.0.0:8080"` | |
-| `std::time::Duration` | `"30s"`, `"1h30m45s"`, `"500ms"` | Safe functional parser |
-| `Vec<T>` | `"a,b,c"`, `"80,443"` | Comma separated lists |
+| `std::time::Duration` | `"30s"`, `"1h30m45s"`, `"500ms"` | Integer units only (`h`, `m`, `s`, `ms`); decimals like `"1.5h"` are not supported |
+| `Vec<T>` | `"a,b,c"`, `"80,443"` | Comma-separated; empty segments (leading/trailing/double commas) are silently ignored |
 | `lockedenv::Secret<T>` | "password" | Redacts value in `Debug` and `Serialize` logs |
-| `Option<T>` | `None` if absent | Overrides `FromEnvStr` absent behavior |
+| `Option<T>` | `None` if absent or empty | An absent key **and** an empty string (`VAR=""`) both produce `None` |
 
 You can add support for your own types by simply implementing `lockedenv::parse::FromEnvStr`.
 
@@ -158,12 +158,12 @@ let e = EnvLockError::parse_error("TIMEOUT".into(), "5min".into(), "unknown unit
 Extend `lockedenv` by enabling features in `Cargo.toml`.
 
 | Feature | Description |
-|---------|-------------|
+| --- | --- |
 | `dotenv` | Unlocks `load_dotenv!("path", { ... })` macros using [`dotenvy`](https://crates.io/crates/dotenvy). |
-| `serde`  | Automatically derives `Serialize` and `Deserialize` on your generated configuration struct. Great for debug logging / dumping config state. |
-| `watch`  | Provides `lockedenv::watch!` for async, background-thread interval drift detection. Generates a listener delta without heavy file watchers. |
-| `url-type`| Connects directly to the [`url`](https://crates.io/crates/url) crate for strong `url::Url` typing. |
-| `tracing`| Automatically logs the loaded configuration struct (with redacted secrets) at `INFO` level using the [`tracing`](https://crates.io/crates/tracing) crate upon successful load. |
+| `serde` | Automatically derives `Serialize` and `Deserialize` on your generated configuration struct. Great for debug logging / dumping config state. |
+| `watch` | Provides `lockedenv::watch!` for async, background-thread interval drift detection. Generates a listener delta without heavy file watchers. |
+| `url-type` | Connects directly to the [`url`](https://crates.io/crates/url) crate for strong `url::Url` typing. |
+| `tracing` | Automatically logs the loaded configuration struct (with redacted secrets) at `INFO` level using the [`tracing`](https://crates.io/crates/tracing) crate upon successful load. |
 
 ### Prefixes & Secrets
 
@@ -191,18 +191,22 @@ let s: lockedenv::Secret<String> = String::from("raw").into(); // From<T>
 ```
 
 ### Feature Showcase: Watcher
+
 Ideal for environments (like K8s or Docker) where external factors could unexpectedly orchestrate config shifts at runtime. Note that dropping the handle stops the watcher cleanly.
 
 ```rust
 // Requires: lockedenv = { version = "0.1", features = ["watch"] }
 let config = lockedenv::load! { TARGET_URL: String };
 
-// Checks every 5 seconds securely in the background.
-let _handle = lockedenv::watch!(interval_secs = 5, on_drift = |key, old, new| {
-    eprintln!("Drift Alert: {} shifted from {} to {}", key, old, new);
-});
+// Checks every 5 seconds; only reads the listed keys on each tick.
+let _handle = lockedenv::watch!(
+    keys = ["TARGET_URL"],
+    interval_secs = 5,
+    on_drift = |key, old, new| {
+        eprintln!("Drift Alert: {} shifted from {} to {}", key, old, new);
+    }
+);
 ```
-
 
 ---
 

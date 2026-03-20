@@ -16,6 +16,7 @@ mod drift {
         let seen2 = seen.clone();
 
         let _handle = lockedenv::watch!(
+            keys = ["DRIFT_CHANGE"],
             interval_ms = 10,
             on_drift = move |key: &str, _old: &str, _new: &str| {
                 if key == "DRIFT_CHANGE" {
@@ -42,6 +43,7 @@ mod drift {
         let removed2 = removed.clone();
 
         let _handle = lockedenv::watch!(
+            keys = ["DRIFT_REMOVAL"],
             interval_ms = 10,
             on_drift = move |key: &str, _old: &str, new: &str| {
                 if key == "DRIFT_REMOVAL" && new == "<removed>" {
@@ -67,6 +69,7 @@ mod drift {
         let cc2 = call_count.clone();
 
         let handle = lockedenv::watch!(
+            keys = ["DRIFT_STOP_TEST"],
             interval_ms = 10,
             on_drift = move |key: &str, _old: &str, _new: &str| {
                 if key == "DRIFT_STOP_TEST" {
@@ -104,6 +107,7 @@ mod drift {
         let c2 = count.clone();
 
         let _handle = lockedenv::watch!(
+            keys = ["DRIFT_MULTI_A", "DRIFT_MULTI_B"],
             interval_ms = 10,
             on_drift = move |_key: &str, _old: &str, _new: &str| {
                 c2.fetch_add(1, Ordering::SeqCst);
@@ -119,6 +123,56 @@ mod drift {
             count.load(Ordering::SeqCst) >= 2,
             "expected at least 2 drift callbacks, got {}",
             count.load(Ordering::SeqCst),
+        );
+    }
+
+    /// Watcher detects a newly added variable (was absent at snapshot time).
+    #[test]
+    fn watcher_detects_addition() {
+        std::env::remove_var("DRIFT_ADDITION");
+
+        let seen = Arc::new(AtomicBool::new(false));
+        let seen2 = seen.clone();
+
+        let _handle = lockedenv::watch!(
+            keys = ["DRIFT_ADDITION"],
+            interval_ms = 10,
+            on_drift = move |key: &str, old: &str, _new: &str| {
+                if key == "DRIFT_ADDITION" && old == "<missing>" {
+                    seen2.store(true, Ordering::SeqCst);
+                }
+            }
+        );
+
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::env::set_var("DRIFT_ADDITION", "appeared");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        assert!(seen.load(Ordering::SeqCst), "watcher should detect a newly added variable");
+    }
+
+    /// Watcher with empty key list never fires any callbacks.
+    #[test]
+    fn watcher_empty_keys_never_fires() {
+        let count = Arc::new(AtomicUsize::new(0));
+        let c2 = count.clone();
+
+        let _handle = lockedenv::watch!(
+            keys = [],
+            interval_ms = 10,
+            on_drift = move |_key: &str, _old: &str, _new: &str| {
+                c2.fetch_add(1, Ordering::SeqCst);
+            }
+        );
+
+        // Mutate something unrelated — the watcher should not fire.
+        std::env::set_var("UNRELATED_VAR_XYZ", "value");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            0,
+            "watcher with no keys must never fire",
         );
     }
 }

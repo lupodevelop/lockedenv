@@ -202,10 +202,14 @@ macro_rules! try_load_dotenv {
 
 // --- feature: watch ---
 
-/// Start a background drift-detection watcher.
+/// Start a background drift-detection watcher for a specific set of keys.
 ///
 /// Returns a [`watcher::WatchHandle`]; drop it (or call `.stop()`) to
 /// terminate the thread gracefully.
+///
+/// Only variables listed in `keys` are monitored.  On each tick the watcher
+/// reads exactly those keys via [`std::env::var`] — O(watched vars) instead
+/// of O(all env vars).
 ///
 /// `on_drift` receives `(key: &str, old: &str, new: &str)` on each change.
 /// `"<removed>"` is passed as `new` when a variable disappears;
@@ -214,21 +218,37 @@ macro_rules! try_load_dotenv {
 /// Requires feature `watch`.
 ///
 /// ```rust,no_run
-/// let _handle = lockedenv::watch!(interval_secs = 60, on_drift = |key, _old, _new| {
-///     eprintln!("env drift detected: {}", key);
-/// });
+/// let _handle = lockedenv::watch!(
+///     keys = ["PORT", "DATABASE_URL"],
+///     interval_secs = 60,
+///     on_drift = |key, _old, _new| {
+///         eprintln!("env drift detected: {}", key);
+///     }
+/// );
 /// // Drop _handle to stop the watcher gracefully.
 /// ```
 #[cfg(feature = "watch")]
 #[macro_export]
 macro_rules! watch {
-    (interval_secs = $secs:expr, on_drift = $cb:expr) => {
-        $crate::watcher::start(std::time::Duration::from_secs($secs), $cb)
+    (keys = [$($key:expr),* $(,)?], interval_secs = $secs:expr, on_drift = $cb:expr) => {
+        $crate::watcher::start(
+            vec![$($key.to_string()),*],
+            std::time::Duration::from_secs($secs),
+            $cb,
+        )
     };
-    (interval_ms = $ms:expr, on_drift = $cb:expr) => {
-        $crate::watcher::start(std::time::Duration::from_millis($ms), $cb)
+    (keys = [$($key:expr),* $(,)?], interval_ms = $ms:expr, on_drift = $cb:expr) => {
+        $crate::watcher::start(
+            vec![$($key.to_string()),*],
+            std::time::Duration::from_millis($ms),
+            $cb,
+        )
     };
-    (on_drift = $cb:expr) => {
-        $crate::watcher::start(std::time::Duration::from_secs(5), $cb)
+    (keys = [$($key:expr),* $(,)?], on_drift = $cb:expr) => {
+        $crate::watcher::start(
+            vec![$($key.to_string()),*],
+            std::time::Duration::from_secs(5),
+            $cb,
+        )
     };
 }
