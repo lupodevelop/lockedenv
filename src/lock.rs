@@ -20,10 +20,7 @@ fn read_raw(key: &str) -> Result<Option<Zeroizing<String>>, EnvLockError> {
 /// Parse a zeroized string into `T`, zeroizing the original afterwards.
 /// Errors are converted into `EnvLockError`; raw values may be redacted.
 #[inline]
-fn parse_val<T: FromEnvStr>(
-    key: &str,
-    val: &Zeroizing<String>,
-) -> Result<T, EnvLockError> {
+fn parse_val<T: FromEnvStr>(key: &str, val: &Zeroizing<String>) -> Result<T, EnvLockError> {
     T::from_env_str(val.as_str()).map_err(|e| {
         let found: String = if T::REDACT_IN_ERRORS {
             "[REDACTED]".into()
@@ -38,20 +35,14 @@ fn parse_val<T: FromEnvStr>(
 #[doc(hidden)]
 #[inline]
 pub fn __read_required<T: FromEnvStr>(key: &str) -> Result<T, EnvLockError> {
-    read_raw(key)?.map_or_else(
-        || T::missing_value(key),
-        |val| parse_val(key, &val),
-    )
+    read_raw(key)?.map_or_else(|| T::missing_value(key), |val| parse_val(key, &val))
 }
 
 /// Read a variable, parse it, or return the provided default.
 #[doc(hidden)]
 #[inline]
 pub fn __read_default<T: FromEnvStr>(key: &str, default: T) -> Result<T, EnvLockError> {
-    read_raw(key)?.map_or_else(
-        || Ok(default),
-        |val| parse_val(key, &val),
-    )
+    read_raw(key)?.map_or_else(|| Ok(default), |val| parse_val(key, &val))
 }
 
 /// Helper forwarding to `T::missing_value` for macro use.

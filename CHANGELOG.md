@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-04-22
+
+### Added
+
+- **`env_struct!` macro** — define a named, publicly accessible configuration struct with
+  `load()`, `try_load()`, `from_map()`, and `try_from_map()` associated functions.
+  Unlike the anonymous structs produced by `load!`, the generated struct has a real name
+  and can be returned from functions, stored in other types, and used as a type annotation.
+  Supports `prefix = "..."`, defaults, `Option<T>`, and `Secret<T>` exactly like the other macros.
+
+- **`check!` and `try_check!` macros** — collect *all* parse/missing errors before failing,
+  instead of stopping at the first one.
+  - `try_check! { ... }` — returns `Ok(config)` on success or `Err(Vec<EnvLockError>)` listing
+    every problem found.
+  - `check! { ... }` — panics with a single message that lists all errors at once.
+  - Both accept `map: <expr>` for HashMap injection and `prefix = "..."` for namespacing,
+    matching the existing macro family.
+
+- **Decimal `Duration` support** — `Duration` now accepts fractional units: `"1.5h"`, `"0.5s"`,
+  `"2.25m"`, `"1.5ms"`. Conversion uses integer arithmetic (no floating-point); truncation
+  to nanosecond precision. Compound segments like `"1.5h30s"` work as expected.
+
+- **`with_hint` on all error variants** — `EnvLockError::with_hint()` now attaches a hint to
+  `Missing` and `Dotenv` errors, not just `Parse`. The hint appears in `Display` output for
+  all three variants. This is a **backward-compatible** change (the `#[non_exhaustive]`
+  attribute on variants prevents external struct construction; adding `hint: Option<String>`
+  does not break external consumers).
+
+### Changed
+
+- `EnvLockError::Missing` now includes a `hint: Option<String>` field (initialized to `None`
+  by the `missing()` constructor).
+- `EnvLockError::Dotenv` now includes a `hint: Option<String>` field (initialized to `None`
+  by the `dotenv()` constructor).
+
+### Tests
+
+- Added 46 new tests covering all new features and previously untested behaviour:
+  decimal Duration parsing (integer and compound segments), `env_struct!` (11 cases including
+  prefix, secrets, public field access, function return), `check!`/`try_check!` (11 cases
+  including error collection count, map variant, prefix, Option-is-not-error),
+  watcher callback panic survival, and `with_hint` on all error variants.
+
 ## [0.2.0] — 2026-03-19
 
 ### Changed

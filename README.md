@@ -6,6 +6,8 @@
 
 [![crates.io](https://img.shields.io/crates/v/lockedenv.svg)](https://crates.io/crates/lockedenv) [![docs.rs](https://img.shields.io/docsrs/lockedenv)](https://docs.rs/lockedenv) [![license-MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT) [![license-Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 
+> **v0.3**: `env_struct!` (named structs), `check!`/`try_check!` (collect all errors), decimal `Duration` (`"1.5h"`), `with_hint` on all error variants.
+
 Environment variables are often a source of subtle bugs: they are read multiple times across the codebase, treated as untyped `String`s, and can silently fail if mutated at runtime. Testing them natively with `std::env::set_var` is unsafe in parallel contexts.
 
 `lockedenv` solves this cleanly: define a struct layout via a macro, enforce type-safe parsing at startup, and pass the generated, immutable struct to your application.
@@ -16,7 +18,7 @@ Add `lockedenv` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-lockedenv = "0.2"
+lockedenv = "0.3"
 ```
 
 Use the `load!` macro to define and parse your configuration:
@@ -48,19 +50,91 @@ If a required variable is missing or cannot be parsed, `load!` **panics with a c
 
 ## The Macro Family
 
-`lockedenv` provides straightforward variants for different needs:
+`lockedenv` provides variants for every need:
 
 ```rust
-// 1. Panics on missing/bad config (Recommended for standard microservices)
+// 1. Panics on missing/bad config — recommended for services that must not boot broken
 let config = lockedenv::load! { PORT: u16, DS_URL: String };
 
-// 2. Returns Result<_, EnvLockError> to manually handle or propagate failures
+// 2. Returns Result<_, EnvLockError> to handle or propagate failures
 let config = lockedenv::try_load! { PORT: u16 }?;
+
+// 3. Named struct — the config type has a real name and can be used in signatures
+lockedenv::env_struct! {
+    pub struct AppConfig {
+        PORT:  u16,
+        HOST:  String,
+        DEBUG: bool = false,
+    }
+}
+fn start(cfg: AppConfig) { /* ... */ }
+fn main() { start(AppConfig::load()); }
+
+// 4. Collect ALL errors before failing — show every missing/bad var at once
+match lockedenv::try_check! { PORT: u16, HOST: String, DB: String } {
+    Ok(cfg)   => { /* use cfg */ }
+    Err(errs) => {
+        for e in &errs { eprintln!("{e}"); }
+        std::process::exit(1);
+    }
+}
+// Or panic with the full list in one shot:
+let config = lockedenv::check! { PORT: u16, HOST: String, DB: String };
+```
+
+### Named Structs with `env_struct!`
+
+When your config struct needs to outlive a single expression — to be stored, returned from a function, or named as a type — use `env_struct!`. It generates a named struct with `load()`, `try_load()`, `from_map()`, and `try_from_map()` associated functions:
+
+```rust
+lockedenv::env_struct! {
+    pub struct ServiceConfig {
+        prefix = "SVC_",             // reads SVC_HOST, SVC_PORT, …
+        HOST:   String,
+        PORT:   u16 = 8080,
+        TOKEN:  lockedenv::Secret<String>,
+        LABEL:  Option<String>,
+    }
+}
+
+// Can appear in function signatures, struct fields, type aliases:
+fn load_config() -> ServiceConfig {
+    ServiceConfig::load()
+}
+
+// In tests, inject a HashMap instead of touching the real environment:
+let m = std::collections::HashMap::from([
+    ("SVC_HOST".into(), "localhost".into()),
+    ("SVC_TOKEN".into(), "secret".into()),
+]);
+let cfg = ServiceConfig::from_map(&m);
+assert_eq!(cfg.HOST, "localhost");
+```
+
+### Collect All Errors with `check!` / `try_check!`
+
+`load!` stops at the first error. `check!` and `try_check!` try every field and report all problems:
+
+```rust
+// Panics with a list of ALL errors, not just the first:
+let config = lockedenv::check! { HOST: String, PORT: u16, DB: String };
+// Panic message: "3 configuration error(s):
+//   - EnvLockError: missing required variable
+//     variable: HOST …
+//   - EnvLockError: missing required variable
+//     variable: PORT …
+//   …"
+
+// Or handle the error list yourself:
+if let Err(errors) = lockedenv::try_check! { HOST: String, PORT: u16, DB: String } {
+    for e in &errors { eprintln!("{e}"); }
+    std::process::exit(1);
+}
 ```
 
 ### Thread-Safe Testing
 
-In tests, mutating the global environment is an anti-pattern. Let `lockedenv` parse directly from a collection map:
+In tests, mutating the global environment is an anti-pattern. All macros accept `map:` for HashMap injection:
 
 ```rust
 #[test]
@@ -71,6 +145,10 @@ fn test_config_parsing() {
 
     let config = lockedenv::from_map! { map: map, PORT: u16 };
     assert_eq!(config.PORT, 8080);
+
+    // Same works for check! and env_struct!:
+    let result = lockedenv::try_check! { map: map, PORT: u16 };
+    assert!(result.is_ok());
 }
 ```
 
@@ -84,7 +162,7 @@ fn test_config_parsing() {
 | `bool` | `"true"`, `"1"`, `"yes"`, `"false"` | Case-insensitive |
 | `std::path::PathBuf` | `"/etc/hosts"` | Does not check disk presence |
 | `IpAddr`, `SocketAddr` | `"127.0.0.1"`, `"0.0.0.0:8080"` | |
-| `std::time::Duration` | `"30s"`, `"1h30m45s"`, `"500ms"` | Integer units only (`h`, `m`, `s`, `ms`); decimals like `"1.5h"` are not supported |
+| `std::time::Duration` | `"30s"`, `"1.5h"`, `"0.5s"`, `"1h30m"` | Units: `h`, `m`, `s`, `ms`; integer and decimal segments; compound allowed |
 | `Vec<T>` | `"a,b,c"`, `"80,443"` | Comma-separated; empty segments (leading/trailing/double commas) are silently ignored |
 | `lockedenv::Secret<T>` | "password" | Redacts value in `Debug` and `Serialize` logs |
 | `Option<T>` | `None` if absent or empty | An absent key **and** an empty string (`VAR=""`) both produce `None` |
@@ -132,7 +210,7 @@ impl AppConfig {
 
 ### Custom Error Hints
 
-When implementing `FromEnvStr`, you can attach runtime hints to parse errors via `EnvLockError::with_hint`. This makes the fail-fast message much clearer for the operator:
+`EnvLockError::with_hint` attaches a human-readable hint to **any** error variant — `Missing`, `Parse`, or `Dotenv`. The hint is shown in `Display` output after the primary message:
 
 ```rust
 use lockedenv::{parse::FromEnvStr, EnvLockError};
@@ -146,11 +224,15 @@ impl FromEnvStr for Port {
     }
 }
 
-// Or attach hints after the fact:
+// Attach a hint to a parse error:
 let e = EnvLockError::parse_error("TIMEOUT".into(), "5min".into(), "unknown unit")
     .with_hint("use 5m or 5s instead");
-// prints: expected type: unknown unit
-//         hint: use 5m or 5s instead
+// → "expected type: unknown unit\n  hint: use 5m or 5s instead"
+
+// Attach a hint to a missing-variable error:
+let e = EnvLockError::missing("DATABASE_URL".into())
+    .with_hint("see .env.example for the expected format");
+// → "missing required variable\n  …\n  hint: see .env.example for the expected format"
 ```
 
 ## Optional Features

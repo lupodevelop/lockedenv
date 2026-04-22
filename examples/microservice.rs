@@ -23,5 +23,8 @@ impl AppConfig {
 
 fn main() {
     let cfg = AppConfig::from_env();
-    println!("running on {} (debug={}, db={})", cfg.port, cfg.debug, cfg.db_url);
+    println!(
+        "running on {} (debug={}, db={})",
+        cfg.port, cfg.debug, cfg.db_url
+    );
 }

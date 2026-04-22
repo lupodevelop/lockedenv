@@ -21,10 +21,7 @@ mod dotenv_tests {
     /// A valid .env file sets variables in the process environment.
     #[test]
     fn valid_file_sets_vars() {
-        let path = tmp_env_file(
-            "valid",
-            "DOTENV_LOAD_VAR_A=hello\nDOTENV_LOAD_VAR_B=42\n",
-        );
+        let path = tmp_env_file("valid", "DOTENV_LOAD_VAR_A=hello\nDOTENV_LOAD_VAR_B=42\n");
         // Remove vars first so the test is deterministic.
         std::env::remove_var("DOTENV_LOAD_VAR_A");
         std::env::remove_var("DOTENV_LOAD_VAR_B");
