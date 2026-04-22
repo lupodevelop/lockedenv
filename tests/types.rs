@@ -11,7 +11,10 @@ use lockedenv::parse::FromEnvStr;
 use std::time::Duration;
 
 fn hmap(pairs: &[(&str, &str)]) -> std::collections::HashMap<String, String> {
-    pairs.iter().map(|(k, v)| ((*k).to_string(), (*v).to_string())).collect()
+    pairs
+        .iter()
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+        .collect()
 }
 
 // ── integers ───────────────────────────────────────────────────────────────
@@ -43,10 +46,15 @@ fn float_parsing() {
 #[test]
 fn bool_parsing() {
     for (s, exp) in [
-        ("true", true), ("false", false),
-        ("1", true), ("0", false),
-        ("yes", true), ("no", false),
-        ("TRUE", true), ("YES", true), ("False", false),
+        ("true", true),
+        ("false", false),
+        ("1", true),
+        ("0", false),
+        ("yes", true),
+        ("no", false),
+        ("TRUE", true),
+        ("YES", true),
+        ("False", false),
     ] {
         assert_eq!(bool::from_env_str(s).unwrap(), exp, "failed for {s:?}");
     }
@@ -61,8 +69,14 @@ fn bool_parsing() {
 fn char_parsing() {
     assert_eq!(char::from_env_str("A").unwrap(), 'A');
     assert_eq!(char::from_env_str("€").unwrap(), '€');
-    assert!(char::from_env_str("").is_err(), "empty string is not a char");
-    assert!(char::from_env_str("AB").is_err(), "two chars should be rejected");
+    assert!(
+        char::from_env_str("").is_err(),
+        "empty string is not a char"
+    );
+    assert!(
+        char::from_env_str("AB").is_err(),
+        "two chars should be rejected"
+    );
 }
 
 // ── PathBuf ───────────────────────────────────────────────────────────────
@@ -82,7 +96,10 @@ fn path_buf_parsing() {
 fn ip_addr_parsing() {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
-    assert_eq!(Ipv4Addr::from_env_str("127.0.0.1").unwrap(), Ipv4Addr::LOCALHOST);
+    assert_eq!(
+        Ipv4Addr::from_env_str("127.0.0.1").unwrap(),
+        Ipv4Addr::LOCALHOST
+    );
     assert_eq!(Ipv6Addr::from_env_str("::1").unwrap(), Ipv6Addr::LOCALHOST);
     assert!(IpAddr::from_env_str("127.0.0.1").is_ok());
     assert!(IpAddr::from_env_str("::1").is_ok());
@@ -93,31 +110,155 @@ fn ip_addr_parsing() {
         SocketAddr::from_env_str("0.0.0.0:8080").unwrap().port(),
         8080,
     );
-    assert!(SocketAddr::from_env_str("localhost:80").is_err(), "hostname not accepted");
+    assert!(
+        SocketAddr::from_env_str("localhost:80").is_err(),
+        "hostname not accepted"
+    );
 }
 
 // ── Duration ──────────────────────────────────────────────────────────────
 
 #[test]
 fn duration_parsing() {
-    assert_eq!(Duration::from_env_str("30s").unwrap(),   Duration::from_secs(30));
-    assert_eq!(Duration::from_env_str("5m").unwrap(),    Duration::from_secs(300));
-    assert_eq!(Duration::from_env_str("2h").unwrap(),    Duration::from_secs(7200));
-    assert_eq!(Duration::from_env_str("500ms").unwrap(), Duration::from_millis(500));
-    assert_eq!(Duration::from_env_str("0s").unwrap(),    Duration::ZERO);
+    assert_eq!(
+        Duration::from_env_str("30s").unwrap(),
+        Duration::from_secs(30)
+    );
+    assert_eq!(
+        Duration::from_env_str("5m").unwrap(),
+        Duration::from_secs(300)
+    );
+    assert_eq!(
+        Duration::from_env_str("2h").unwrap(),
+        Duration::from_secs(7200)
+    );
+    assert_eq!(
+        Duration::from_env_str("500ms").unwrap(),
+        Duration::from_millis(500)
+    );
+    assert_eq!(Duration::from_env_str("0s").unwrap(), Duration::ZERO);
     // compound segments
-    assert_eq!(Duration::from_env_str("1h30m").unwrap(),     Duration::from_secs(5400));
-    assert_eq!(Duration::from_env_str("1h30m45s").unwrap(),  Duration::from_secs(5445));
-    assert_eq!(Duration::from_env_str("2h500ms").unwrap(),   Duration::from_secs(7200) + Duration::from_millis(500));
+    assert_eq!(
+        Duration::from_env_str("1h30m").unwrap(),
+        Duration::from_secs(5400)
+    );
+    assert_eq!(
+        Duration::from_env_str("1h30m45s").unwrap(),
+        Duration::from_secs(5445)
+    );
+    assert_eq!(
+        Duration::from_env_str("2h500ms").unwrap(),
+        Duration::from_secs(7200) + Duration::from_millis(500)
+    );
+}
+
+#[test]
+fn duration_decimal_hours() {
+    assert_eq!(
+        Duration::from_env_str("1.5h").unwrap(),
+        Duration::from_secs(5400)
+    );
+    assert_eq!(
+        Duration::from_env_str("0.5h").unwrap(),
+        Duration::from_secs(1800)
+    );
+    assert_eq!(
+        Duration::from_env_str("2.25h").unwrap(),
+        Duration::from_secs(8100)
+    );
+}
+
+#[test]
+fn duration_decimal_minutes() {
+    assert_eq!(
+        Duration::from_env_str("1.5m").unwrap(),
+        Duration::from_secs(90)
+    );
+    assert_eq!(
+        Duration::from_env_str("0.5m").unwrap(),
+        Duration::from_secs(30)
+    );
+}
+
+#[test]
+fn duration_decimal_seconds() {
+    assert_eq!(
+        Duration::from_env_str("0.5s").unwrap(),
+        Duration::from_millis(500)
+    );
+    assert_eq!(
+        Duration::from_env_str("1.5s").unwrap(),
+        Duration::from_millis(1500)
+    );
+    assert_eq!(
+        Duration::from_env_str("0.001s").unwrap(),
+        Duration::from_micros(1000)
+    );
+}
+
+#[test]
+fn duration_decimal_millis() {
+    assert_eq!(
+        Duration::from_env_str("1.5ms").unwrap(),
+        Duration::from_nanos(1_500_000)
+    );
+    assert_eq!(
+        Duration::from_env_str("0.5ms").unwrap(),
+        Duration::from_nanos(500_000)
+    );
+}
+
+#[test]
+fn duration_decimal_compound() {
+    // Mixed integer + decimal segments
+    assert_eq!(
+        Duration::from_env_str("1h0.5m").unwrap(),
+        Duration::from_secs(3600) + Duration::from_secs(30),
+    );
+    assert_eq!(
+        Duration::from_env_str("1.5h30s").unwrap(),
+        Duration::from_secs(5400) + Duration::from_secs(30),
+    );
+}
+
+#[test]
+fn duration_decimal_zero_whole() {
+    assert_eq!(
+        Duration::from_env_str("0.5s").unwrap(),
+        Duration::from_millis(500)
+    );
+    assert_eq!(Duration::from_env_str("0.0s").unwrap(), Duration::ZERO);
+}
+
+#[test]
+fn duration_decimal_invalid() {
+    assert!(
+        Duration::from_env_str("1.h").is_err(),
+        "digit required after decimal"
+    );
+    assert!(
+        Duration::from_env_str(".5h").is_err(),
+        "digit required before decimal"
+    );
+    assert!(
+        Duration::from_env_str("1.2.3s").is_err(),
+        "double decimal invalid"
+    );
 }
 
 #[test]
 fn duration_invalid_inputs() {
-    assert!(Duration::from_env_str("").is_err(),      "empty");
-    assert!(Duration::from_env_str("100").is_err(),   "missing unit");
-    assert!(Duration::from_env_str("5min").is_err(),  "unknown unit 'min'");
-    assert!(Duration::from_env_str("abc").is_err(),   "no digits");
-    assert!(Duration::from_env_str("1h2").is_err(),   "trailing digits without unit");
+    assert!(Duration::from_env_str("").is_err(), "empty");
+    assert!(Duration::from_env_str("100").is_err(), "missing unit");
+    assert!(
+        Duration::from_env_str("5min").is_err(),
+        "unknown unit 'min'"
+    );
+    assert!(Duration::from_env_str("abc").is_err(), "no digits");
+    assert!(
+        Duration::from_env_str("1h2").is_err(),
+        "trailing digits without unit"
+    );
 }
 
 // ── Option<T> ─────────────────────────────────────────────────────────────
@@ -139,14 +280,20 @@ fn option_empty_string_is_none() {
     // An empty string in the map is treated as None for Option<T>
     let m = hmap(&[("OPT_EMPTY", "")]);
     let config = lockedenv::from_map! { map: m, OPT_EMPTY: Option<u32> };
-    assert!(config.OPT_EMPTY.is_none(), "empty string should map to None");
+    assert!(
+        config.OPT_EMPTY.is_none(),
+        "empty string should map to None"
+    );
 }
 
 #[test]
 fn option_parse_error_propagates() {
     let m = hmap(&[("OPT_BAD", "not_a_number")]);
     let result = lockedenv::try_from_map! { map: m, OPT_BAD: Option<u32> };
-    assert!(result.is_err(), "invalid value inside Option should still error");
+    assert!(
+        result.is_err(),
+        "invalid value inside Option should still error"
+    );
 }
 
 // ── try_from_map! error content ───────────────────────────────────────────
@@ -157,7 +304,10 @@ fn try_from_map_error_names_variable() {
     let r = lockedenv::try_from_map! { map: m, MISSING_PORT: u16 };
     assert!(r.is_err());
     let msg = r.unwrap_err().to_string();
-    assert!(msg.contains("MISSING_PORT"), "error should mention variable: {msg}");
+    assert!(
+        msg.contains("MISSING_PORT"),
+        "error should mention variable: {msg}"
+    );
 }
 
 #[test]
@@ -166,7 +316,7 @@ fn parse_error_message_has_value_and_var() {
     let r = lockedenv::try_from_map! { map: m, ERR_PORT: u16 };
     let msg = r.unwrap_err().to_string();
     assert!(msg.contains("ERR_PORT"), "error message: {msg}");
-    assert!(msg.contains("abc"),      "error message: {msg}");
+    assert!(msg.contains("abc"), "error message: {msg}");
 }
 
 // ── url-type feature ──────────────────────────────────────────────────────
@@ -281,17 +431,17 @@ fn vec_error_contains_index() {
         PORTS: Vec<u16>,
     };
     let msg = r.unwrap_err().to_string();
-    assert!(msg.contains("item[1]") || msg.contains("nope"), "error: {msg}");
+    assert!(
+        msg.contains("item[1]") || msg.contains("nope"),
+        "error: {msg}"
+    );
 }
 
 // ── prefix support ────────────────────────────────────────────────────────
 
 #[test]
 fn map_prefix_support() {
-    let m = hmap(&[
-        ("APP_PORT", "8080"),
-        ("APP_HOST", "localhost"),
-    ]);
+    let m = hmap(&[("APP_PORT", "8080"), ("APP_HOST", "localhost")]);
 
     let config = lockedenv::from_map! {
         map: m,
@@ -479,7 +629,10 @@ fn from_map_panics_on_missing() {
     let result = std::panic::catch_unwind(|| {
         lockedenv::from_map! { map: m, REQUIRED: u32 }
     });
-    assert!(result.is_err(), "from_map! must panic on missing required field");
+    assert!(
+        result.is_err(),
+        "from_map! must panic on missing required field"
+    );
 }
 
 #[test]
@@ -507,18 +660,24 @@ fn error_is_clone() {
 }
 
 #[test]
-fn with_hint_noop_on_missing() {
-    let e = lockedenv::EnvLockError::missing("X".into()).with_hint("ignored");
+fn with_hint_on_missing_shows_hint() {
+    let e = lockedenv::EnvLockError::missing("X".into()).with_hint("add X to your .env");
     let s = e.to_string();
-    assert!(!s.contains("ignored"), "hint on Missing should be no-op: {s}");
+    assert!(
+        s.contains("add X to your .env"),
+        "hint should appear on Missing: {s}"
+    );
 }
 
 #[test]
-fn with_hint_noop_on_dotenv() {
+fn with_hint_on_dotenv_shows_hint() {
     let e = lockedenv::EnvLockError::dotenv(".env".into(), "io error".into())
-        .with_hint("ignored");
+        .with_hint("check file permissions");
     let s = e.to_string();
-    assert!(!s.contains("ignored"), "hint on Dotenv should be no-op: {s}");
+    assert!(
+        s.contains("check file permissions"),
+        "hint should appear on Dotenv: {s}"
+    );
 }
 
 #[test]
@@ -554,10 +713,7 @@ fn char_emoji() {
 
 #[test]
 fn duration_all_zeros() {
-    assert_eq!(
-        Duration::from_env_str("0h0m0s0ms").unwrap(),
-        Duration::ZERO,
-    );
+    assert_eq!(Duration::from_env_str("0h0m0s0ms").unwrap(), Duration::ZERO,);
 }
 
 #[test]
@@ -624,7 +780,14 @@ fn duration_number_overflow() {
 #[test]
 fn vec_of_durations() {
     let v = Vec::<Duration>::from_env_str("30s, 1m, 2h").unwrap();
-    assert_eq!(v, vec![Duration::from_secs(30), Duration::from_secs(60), Duration::from_secs(7200)]);
+    assert_eq!(
+        v,
+        vec![
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(7200)
+        ]
+    );
 }
 
 #[test]
@@ -689,6 +852,10 @@ fn multiple_errors_first_field_wins() {
 fn error_implements_std_error() {
     let e1: Box<dyn std::error::Error> = Box::new(lockedenv::EnvLockError::missing("X".into()));
     assert!(e1.source().is_none());
-    let e2: Box<dyn std::error::Error> = Box::new(lockedenv::EnvLockError::parse_error("Y".into(), "z".into(), "bad"));
+    let e2: Box<dyn std::error::Error> = Box::new(lockedenv::EnvLockError::parse_error(
+        "Y".into(),
+        "z".into(),
+        "bad",
+    ));
     assert!(e2.to_string().contains('Y'));
 }

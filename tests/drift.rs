@@ -30,7 +30,10 @@ mod drift {
         std::env::set_var("DRIFT_CHANGE", "2");
         std::thread::sleep(std::time::Duration::from_millis(50));
 
-        assert!(seen.load(Ordering::SeqCst), "watcher should detect the changed variable");
+        assert!(
+            seen.load(Ordering::SeqCst),
+            "watcher should detect the changed variable"
+        );
     }
 
     /// Watcher detects removal of an env var.
@@ -56,7 +59,10 @@ mod drift {
         std::env::remove_var("DRIFT_REMOVAL");
         std::thread::sleep(std::time::Duration::from_millis(50));
 
-        assert!(removed.load(Ordering::SeqCst), "watcher should fire when a variable is removed");
+        assert!(
+            removed.load(Ordering::SeqCst),
+            "watcher should fire when a variable is removed"
+        );
     }
 
     /// After the `WatchHandle` is dropped, no further callbacks fire.
@@ -148,7 +154,10 @@ mod drift {
         std::env::set_var("DRIFT_ADDITION", "appeared");
         std::thread::sleep(std::time::Duration::from_millis(50));
 
-        assert!(seen.load(Ordering::SeqCst), "watcher should detect a newly added variable");
+        assert!(
+            seen.load(Ordering::SeqCst),
+            "watcher should detect a newly added variable"
+        );
     }
 
     /// Watcher with empty key list never fires any callbacks.
@@ -173,6 +182,45 @@ mod drift {
             count.load(Ordering::SeqCst),
             0,
             "watcher with no keys must never fire",
+        );
+    }
+
+    /// A panicking on_drift callback must not kill the watcher thread.
+    /// The thread must survive the first panic and still fire on the next tick.
+    #[test]
+    fn watcher_survives_callback_panic() {
+        std::env::set_var("DRIFT_PANIC_KEY", "v0");
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let cc2 = call_count.clone();
+        let survived = Arc::new(AtomicBool::new(false));
+        let survived2 = survived.clone();
+
+        let _handle = lockedenv::watch!(
+            keys = ["DRIFT_PANIC_KEY"],
+            interval_ms = 10,
+            on_drift = move |_key: &str, _old: &str, _new: &str| {
+                let n = cc2.fetch_add(1, Ordering::SeqCst);
+                if n == 0 {
+                    panic!("intentional callback panic on first drift");
+                }
+                // Second+ invocations — thread survived
+                survived2.store(true, Ordering::SeqCst);
+            }
+        );
+
+        // First change: callback panics, thread must survive
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::env::set_var("DRIFT_PANIC_KEY", "v1");
+        std::thread::sleep(std::time::Duration::from_millis(60));
+
+        // Second change: callback should still fire
+        std::env::set_var("DRIFT_PANIC_KEY", "v2");
+        std::thread::sleep(std::time::Duration::from_millis(60));
+
+        assert!(
+            survived.load(Ordering::SeqCst),
+            "watcher thread must survive a panicking on_drift callback",
         );
     }
 }
