@@ -273,7 +273,9 @@ impl<T: Zeroize> crate::serde::Serialize for Secret<T> {
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T: Zeroize + crate::serde::Deserialize<'de>> crate::serde::Deserialize<'de> for Secret<T> {
+impl<'de, T: Zeroize + crate::serde::Deserialize<'de>> crate::serde::Deserialize<'de>
+    for Secret<T>
+{
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: crate::serde::Deserializer<'de>,
@@ -296,35 +298,99 @@ impl<T: FromEnvStr + Zeroize> FromEnvStr for Secret<T> {
     }
 }
 
-/// Splits `s` into an iterator of `(number_str, unit_str)` segments,
-/// e.g. `"1h30m"` → `[("1","h"),("30","m")]`.
-fn duration_segments(s: &str) -> impl Iterator<Item = Result<(&str, &str), String>> {
+/// A parsed duration segment: whole part, optional fractional digits, and unit.
+struct DurationSegment<'a> {
+    whole: u64,
+    frac: Option<&'a str>,
+    unit: &'a str,
+}
+
+/// Splits `s` into segments like `"1.5h30m"` → `[(1, Some("5"), "h"), (30, None, "m")]`.
+fn duration_segments(s: &str) -> impl Iterator<Item = Result<DurationSegment<'_>, String>> {
     let mut rest = s;
     std::iter::from_fn(move || {
         if rest.is_empty() {
             return None;
         }
-        let num_len = rest
+        // Parse whole digits
+        let whole_len = rest
             .chars()
             .take_while(char::is_ascii_digit)
             .map(char::len_utf8)
             .sum::<usize>();
-        if num_len == 0 {
+        if whole_len == 0 {
             return Some(Err(format!("expected digit at {rest:?}")));
         }
-        let (n_str, tail) = rest.split_at(num_len);
+        let (whole_str, tail) = rest.split_at(whole_len);
+        let whole: u64 = match whole_str.parse() {
+            Ok(n) => n,
+            Err(_) => return Some(Err(format!("bad number {whole_str:?}"))),
+        };
+
+        // Optional decimal part
+        let (frac, tail) = if tail.starts_with('.') {
+            let after_dot = &tail[1..];
+            let frac_len = after_dot
+                .chars()
+                .take_while(char::is_ascii_digit)
+                .map(char::len_utf8)
+                .sum::<usize>();
+            if frac_len == 0 {
+                return Some(Err(format!(
+                    "expected digit after decimal point in {rest:?}"
+                )));
+            }
+            (Some(&after_dot[..frac_len]), &after_dot[frac_len..])
+        } else {
+            (None, tail)
+        };
+
+        // Unit
         let unit_len = tail
             .chars()
             .take_while(char::is_ascii_alphabetic)
             .map(char::len_utf8)
             .sum::<usize>();
         if unit_len == 0 {
-            return Some(Err(format!("missing unit after {n_str:?}")));
+            return Some(Err(format!("missing unit after {whole_str:?}")));
         }
-        let (u_str, next) = tail.split_at(unit_len);
+        let (unit, next) = tail.split_at(unit_len);
         rest = next;
-        Some(Ok((n_str, u_str)))
+        Some(Ok(DurationSegment { whole, frac, unit }))
     })
+}
+
+/// Convert a duration segment to nanoseconds using integer arithmetic (no float).
+fn segment_to_nanos(seg: &DurationSegment<'_>) -> Result<u128, String> {
+    let unit_ns: u128 = match seg.unit {
+        "h" => 3_600_000_000_000,
+        "m" => 60_000_000_000,
+        "s" => 1_000_000_000,
+        "ms" => 1_000_000,
+        other => return Err(format!("unknown duration unit {other:?} — use h, m, s, ms")),
+    };
+
+    let whole_ns = (seg.whole as u128)
+        .checked_mul(unit_ns)
+        .ok_or_else(|| format!("overflow in {} part", seg.unit))?;
+
+    let frac_ns: u128 = if let Some(frac_str) = seg.frac {
+        let divisor = 10u128.pow(frac_str.len() as u32);
+        let frac_val: u128 = frac_str
+            .parse()
+            .map_err(|_| format!("bad fraction {frac_str:?}"))?;
+        // frac_val * unit_ns / divisor — integer division, truncates sub-ns
+        frac_val
+            .checked_mul(unit_ns)
+            .ok_or_else(|| format!("overflow in {} fractional part", seg.unit))?
+            / divisor
+    } else {
+        0
+    };
+
+    whole_ns
+        .checked_add(frac_ns)
+        .ok_or_else(|| format!("overflow in {} segment", seg.unit))
 }
 
 impl FromEnvStr for Duration {
@@ -333,20 +399,16 @@ impl FromEnvStr for Duration {
         if s.is_empty() {
             return Err("empty duration string".into());
         }
-        duration_segments(s).try_fold(Duration::ZERO, |acc, seg| {
-            let (n_str, u_str) = seg?;
-            let n: u64 = n_str
-                .parse()
-                .map_err(|_| format!("bad number {n_str:?}"))?;
-            let added = match u_str {
-                "h"  => Duration::from_secs(n.checked_mul(3600).ok_or("overflow in hours")? ),
-                "m"  => Duration::from_secs(n.checked_mul(60).ok_or("overflow in minutes")?),
-                "s"  => Duration::from_secs(n),
-                "ms" => Duration::from_millis(n),
-                other => return Err(format!("unknown duration unit {other:?} — use h, m, s, ms")),
-            };
-            acc.checked_add(added).ok_or_else(|| "duration total overflow".into())
-        })
+        let total_ns =
+            duration_segments(s).try_fold(0u128, |acc, seg| -> Result<u128, String> {
+                let ns = segment_to_nanos(&seg?)?;
+                acc.checked_add(ns)
+                    .ok_or_else(|| "duration total overflow".to_string())
+            })?;
+        // u128 nanoseconds → Duration
+        let secs = (total_ns / 1_000_000_000) as u64;
+        let nanos = (total_ns % 1_000_000_000) as u32;
+        Ok(Duration::new(secs, nanos))
     }
 }
 
